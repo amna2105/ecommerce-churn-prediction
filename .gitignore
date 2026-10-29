@@ -18,3 +18,9 @@ Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints
+
+# Scratch artifacts (do not publish)
+notebooks/*.joblib
+notebooks/new_metrics.json
+notebooks/images/
+models/metrics_new.json

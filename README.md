@@ -1,103 +1,104 @@
-# E-Commerce Customer Churn Prediction
+# E-commerce Customer Churn Prediction
 
-Predicting which customers of an online e-commerce platform are likely to churn, so the business can target retention efforts where they matter most.
+A retention team can only contact about 10% of its customers. Which ones should it contact first?
 
-![Python](https://img.shields.io/badge/Python-3.12-blue)
-![scikit--learn](https://img.shields.io/badge/scikit--learn-ML-orange)
-![License](https://img.shields.io/badge/License-MIT-green)
+## Result
 
-## Overview
+I tested the model on 1,126 customers it never saw during training. 190 of them churned. The 112 customers the model ranks highest (the top 10%) include **107 real churners**. That catches 56% of all churners. No list of 112 customers could catch more than 59%.
 
-Customer churn is one of the most expensive problems for a subscription or repeat-purchase business — acquiring a new customer typically costs far more than retaining an existing one. This project builds an end-to-end machine learning pipeline that:
+| | Logistic regression (baseline) | Final model (gradient boosting) |
+|---|---|---|
+| ROC-AUC | 0.873 | 0.982 |
+| Churners found in the top 10% list | 90 of 190 (47%) | 107 of 190 (56%) |
+| Real churners among the 112 contacted | 90 of 112 | 107 of 112 |
 
-- Cleans and explores a real e-commerce customer dataset (5,630 customers, 20 features)
-- Engineers features and handles severe class imbalance (~17% churn rate)
-- Trains and compares Logistic Regression and Random Forest classifiers
-- Evaluates using precision, recall, F1, and AUC-ROC (not just accuracy, which is misleading here)
-- Identifies the strongest drivers of churn for the business to act on
+On this one test set, the ROC-AUC could plausibly range from 0.976 to 0.988 (bootstrap, 500 resamples).
 
-## Results
+![Churners caught vs customers contacted](images/capture_curve.png)
 
-| Model | AUC-ROC | F1 (churn class) | Precision | Recall |
-|---|---|---|---|---|
-| Logistic Regression (SMOTE) | 0.868 | 0.600 | 0.492 | 0.768 |
-| **Random Forest (SMOTE)** | **0.997** | **0.952** | **0.962** | **0.942** |
+The blue line is the model. The dashed line is the best any list could do. The dotted line is a random list.
 
-The Random Forest model correctly identifies **94% of customers who actually churn** while keeping false positives low, and is saved as the production model in `models/churn_model.pkl`.
+## Why not accuracy?
 
-**Top churn drivers (feature importance):**
+About 17% of customers churn. A model that says "nobody will churn" is right 83% of the time and finds zero churners. So I look at the top-10% list instead, because that's the decision the retention team actually makes.
 
-![Feature Importance](reports/figures/feature_importance.png)
+## How I tested it
 
-`Tenure` dominates — newly acquired customers churn at far higher rates than long-tenured ones — followed by `CashbackAmount`, `DaySinceLastOrder`, and whether the customer has filed a `Complain`.
+My first version of this project reported a ROC-AUC of 0.997. That number was too good, so I rebuilt the project and changed how it's tested:
 
-<details>
-<summary>ROC curve & confusion matrix</summary>
+1. **Split first.** The test set is locked away until the end and used once.
+2. **Duplicates stay together.** 556 rows are identical copies of another row once `CustomerID` is ignored. Copies never sit on both sides of the split. With the copies mixed across the split, the cross-validated ROC-AUC was 0.979. With copies kept together, it was 0.972.
+3. **A pipeline does the preprocessing.** Medians, encoding and every other rule are learned from training data only.
+4. **Baselines.** A random list, a "contact people who complained" rule and logistic regression.
+5. **Cross-validation** on the training data to compare models, so the test set never guides a decision.
 
-![ROC Curve](reports/figures/roc_curve_comparison.png)
-![Confusion Matrix](reports/figures/confusion_matrix.png)
+I can't say how much of the drop from 0.997 came from each fix.
 
-</details>
+## Sanity checks
 
-## Business Recommendations
+Scores below are ROC-AUC from cross-validation on the training data.
 
-- **Focus retention on new customers.** Tenure is the single strongest churn signal — the first weeks/months of the relationship are the highest-risk window.
-- **Fast-track complaint resolution.** Customers who complain churn at a notably higher rate; quick resolution is likely a high-leverage retention lever.
-- **Use cashback and order-recency as win-back triggers.** Customers earning less cashback per order or who haven't ordered recently are good targets for proactive outreach or a promotional nudge.
+| Check | ROC-AUC |
+|---|---|
+| Final model, all features | 0.970 |
+| Without `Tenure` | 0.936 |
+| Without `Complain` | 0.954 |
+| Without `CashbackAmount` | 0.973 |
+| Random list (ignores every feature) | 0.499 |
+| Answers shuffled | 0.486 |
 
-## Project Structure
+The random list and the shuffled answers both land near 0.5, as they should. Dropping `Tenure` hurts the most, but the model still scores 0.936 without it.
+
+## What I tried that didn't help
+
+The Kaggle notebook I started from used a new feature (cashback per order), outlier capping, SMOTE and class weights. I tested each one with the same model and the same cross-validation. PR-AUC stayed between 0.898 and 0.908 for every version, and the plain base model scored 0.908. I left all four out.
+
+## Where the model misses
+
+The top-10% list is full of new customers. Among customers with 0 to 3 months of tenure, it finds 82 of 108 churners. Among customers with more than 3 months of tenure, it finds only 11 of 53 churners. Where tenure is missing, it finds 14 of 29. Some of these groups are small, so I wouldn't lean on the exact percentages.
+
+## What the model leans on
+
+Permutation importance (how much PR-AUC drops when one column is shuffled):
+
+| Column | Drop |
+|---|---|
+| Tenure | 0.470 |
+| Complain | 0.175 |
+| NumberOfAddress | 0.137 |
+| CashbackAmount | 0.086 |
+
+`CashbackAmount` ranks high here, but removing it from the model changed almost nothing (0.973 vs 0.970). Other columns probably carry the same information, so I don't claim cashback drives churn.
+
+## Limitations
+
+- One public Kaggle dataset. It may be easy or synthetic, and I couldn't confirm where it comes from. A score this high probably won't hold on real company data.
+- One train/test split and a small test set.
+- There are no dates, so I couldn't test on a later time period, which is how a real model is used.
+- I don't know when `Tenure` was measured compared to the churn event. If it was measured after, it would give away part of the answer.
+
+Before using something like this for real, I'd test it on a later time period, agree with the company on what "churn" means, and set up monitoring and retraining.
+
+## Run it yourself
+
+1. Download the "E Commerce Dataset" from [Kaggle](https://www.kaggle.com/datasets/ankitverma2010/ecommerce-customer-churn-analysis-and-prediction), rename it `E_Commerce_Dataset.xlsx` and put it in `data/raw/`. I don't include the file because of Kaggle's terms.
+2. Install the packages:
+   ```
+   pip install -r requirements.txt
+   ```
+3. Open `notebooks/churn_prediction.ipynb` and run all cells. It takes a few minutes.
+
+## Files
 
 ```
-ecommerce-churn-prediction/
-├── data/
-│   └── raw/                      # place E_Commerce_Dataset.xlsx here (not tracked in git)
-├── notebooks/
-│   └── customer_churn_analysis.ipynb   # full EDA + modeling walkthrough, with narrative
-├── src/
-│   ├── data_preprocessing.py     # cleaning, feature engineering, encoding
-│   └── train.py                  # end-to-end training script (CLI-runnable)
-├── models/                       # saved model, scaler, feature list, metrics.json
-├── reports/figures/              # generated plots
-├── requirements.txt
-└── README.md
+data/raw/        put the Kaggle file here (not included)
+images/          capture_curve.png
+models/          churn_pipeline.joblib, metrics.json
+notebooks/       churn_prediction.ipynb
 ```
 
-## Getting Started
-
-```bash
-git clone https://github.com/<your-username>/ecommerce-churn-prediction.git
-cd ecommerce-churn-prediction
-pip install -r requirements.txt
-```
-
-Download the dataset ([E Commerce Dataset on Kaggle](https://www.kaggle.com/datasets/ankitverma2010/ecommerce-customer-churn-analysis-and-prediction)) and place `E_Commerce_Dataset.xlsx` in `data/raw/`.
-
-**Run the full pipeline from the command line:**
-```bash
-python -m src.train
-```
-This retrains both models, prints evaluation metrics, and saves the best model plus figures to `models/` and `reports/figures/`.
-
-**Or explore the analysis interactively:**
-```bash
-jupyter notebook notebooks/customer_churn_analysis.ipynb
-```
-
-## Methodology Notes
-
-- **Missing values** are imputed per-column with the median (numeric columns only).
-- **Outliers** are capped using the IQR (winsorizing) method rather than dropped, to preserve sample size.
-- **Class imbalance** (~1 churner for every 5 retained customers) is addressed with SMOTE oversampling on the training set only — the test set is left untouched to give an honest performance estimate.
-- **Evaluation** deliberately reports precision/recall/F1/AUC-ROC per class instead of leading with accuracy, since a model that always predicts "no churn" would still score ~83% accuracy while being useless.
-
-## Tech Stack
-
-Python · pandas · NumPy · scikit-learn · imbalanced-learn (SMOTE) · matplotlib · seaborn · joblib
-
-## Dataset
-
-[E Commerce Dataset](https://www.kaggle.com/datasets/ankitverma2010/ecommerce-customer-churn-analysis-and-prediction) (Kaggle). Not redistributed in this repo — see `data/raw/README.md` for download instructions.
+`churn_pipeline.joblib` holds the preprocessing and the model together, so a raw customer row can go straight in.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT
