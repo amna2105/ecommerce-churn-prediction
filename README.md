@@ -88,9 +88,21 @@ Before using something like this for real, I'd test it on a later time period, a
    ```
 3. Open `notebooks/churn_prediction.ipynb` and run all cells. It takes a few minutes.
 
+## Try the demo app
+
+The app loads the saved model. You can type in one customer and see a churn risk score, or upload a file of customers and it flags the 10% with the highest risk.
+
+```
+streamlit run app.py
+```
+
+The three example customers in the app are made up. The risk score is a ranking score. I haven't checked whether a score of 70% really means that 70 out of 100 such customers leave.
+![One customer](images/app_one_customer.png)
+![Many customers](images/app_many_customers.png)
 ## Files
 
 ```
+app.py           Streamlit demo
 data/raw/        put the Kaggle file here (not included)
 images/          capture_curve.png
 models/          churn_pipeline.joblib, metrics.json
