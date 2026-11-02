@@ -1,5 +1,9 @@
 # E-commerce Customer Churn Prediction
 
+[![Streamlit App](https://img.shields.io/badge/Streamlit-Live%20Demo-ff4b4b?style=for-the-badge&logo=Streamlit&logoColor=white)](https://ecommerce-churn-prediction-fa44eve3kzfp82eo3npmni.streamlit.app/)
+
+> ** [Try out the interactive web app live here!](https://ecommerce-churn-prediction-fa44eve3kzfp82eo3npmni.streamlit.app/)**
+
 A retention team can only contact about 10% of its customers. Which ones should it contact first?
 
 ## Result
